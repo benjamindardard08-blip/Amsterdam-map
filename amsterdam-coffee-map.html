@@ -1,0 +1,1359 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Carte des coffeeshops à Amsterdam">
+  <title>Amsterdam Coffee Map</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css">
+  <style>
+    :root { --ink:#173c32; --pine:#155442; --cream:#f6f1e7; --paper:#fffcf5; --sand:#e8dcc4; --muted:#6a7269; --line:#dfd7c7; --coral:#d6644c; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; background:var(--cream); color:var(--ink); font-family:"DM Sans",sans-serif; }
+    button,input,select { font:inherit; }
+    .app, main { min-height:100vh; position:relative; }
+    .app > aside { position:absolute; top:20px; left:50%; transform:translateX(-50%); z-index:600; width:min(620px, calc(100vw - 32px)); background:rgba(255,252,245,.96); padding:10px 12px; border-radius:15px; box-shadow:0 8px 30px rgba(22,50,42,.15); display:grid; grid-template-columns:auto minmax(0,1fr); gap:12px; align-items:center; }
+    .brand { display:flex; align-items:center; gap:8px; margin:0; white-space:nowrap; }
+    .brand-mark { width:34px; height:34px; display:grid; place-items:center; border-radius:50%; background:var(--pine); color:#fff; font-size:18px; }
+    h1 { font:600 19px/1 Fraunces,serif; margin:0; letter-spacing:-.03em; }
+    .eyebrow { display:none; }
+    label { display:block; color:var(--muted); font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; margin:0 0 7px; }
+    .search { position:relative; margin:0; }
+    .search input, select { width:100%; border:1px solid var(--line); border-radius:10px; background:#fffdf8; color:var(--ink); padding:12px 13px; outline:none; }
+    .search input { padding-left:39px; }
+    .search span { position:absolute; left:14px; top:37px; color:var(--muted); }
+    input:focus,select:focus { border-color:var(--pine); box-shadow:0 0 0 3px rgba(21,84,66,.12); }
+    .filters, .section-title, #results, #no-results, .saved { display:none; }
+    .section-title { display:flex; align-items:baseline; justify-content:space-between; margin:0 0 10px; }
+    h2 { margin:0; font-size:14px; font-weight:700; }
+    .count { color:var(--muted); font-size:12px; }
+    #results { display:grid; gap:8px; }
+    .place { width:100%; border:1px solid transparent; background:transparent; color:inherit; cursor:pointer; text-align:left; padding:12px; border-radius:11px; display:flex; gap:10px; align-items:flex-start; }
+    .place:hover,.place:focus-visible { border-color:var(--sand); background:#fffdf8; outline:none; }
+    .place.is-active { background:#edf4ef; border-color:#c7ddcf; }
+    .pin-dot { width:9px; height:9px; border-radius:50%; background:var(--coral); margin-top:5px; flex:none; }
+    .place.is-active .pin-dot { background:var(--pine); }
+    .place strong { display:block; font-size:14px; }
+    .place small { display:block; margin-top:3px; font-size:12px; color:var(--muted); }
+    .saved { border-top:1px solid var(--line); margin-top:20px; padding-top:20px; }
+    .saved-list { display:grid; gap:7px; }
+    .saved-item { display:flex; align-items:center; justify-content:space-between; gap:8px; background:#edf4ef; padding:9px 10px; border-radius:9px; font-size:13px; }
+    .saved-item button { border:0; background:transparent; cursor:pointer; color:var(--pine); font-size:19px; line-height:1; }
+    .empty { color:var(--muted); font-size:13px; padding:14px 0; }
+    #map { position:absolute; inset:0; }
+    .leaflet-routing-container { display:none; }
+    .map-label { position:absolute; top:22px; left:22px; z-index:500; padding:8px 12px; background:rgba(255,252,245,.94); border-radius:999px; color:var(--pine); font-size:12px; font-weight:700; box-shadow:0 4px 18px rgba(22,50,42,.12); }
+    .location-button { position:absolute; z-index:600; right:18px; bottom:28px; width:42px; height:42px; border:0; border-radius:50%; cursor:pointer; background:var(--paper); color:var(--pine); font-size:18px; box-shadow:0 5px 17px rgba(22,50,42,.18); }
+    .directory-toggle { position:absolute; z-index:600; top:50%; left:0; transform:translateY(-50%); border:0; border-radius:0 10px 10px 0; background:var(--pine); color:#fff; padding:12px 9px; cursor:pointer; font-size:12px; font-weight:700; writing-mode:vertical-rl; letter-spacing:.04em; box-shadow:0 5px 17px rgba(22,50,42,.18); }
+    .directory { position:absolute; z-index:650; top:0; left:0; height:100%; width:min(310px, calc(100vw - 54px)); padding:20px 14px; background:rgba(255,252,245,.98); box-shadow:7px 0 28px rgba(22,50,42,.17); transform:translateX(-102%); transition:transform .2s ease; overflow:auto; }
+    .directory.is-open { transform:translateX(0); }
+    .directory-head { display:flex; align-items:center; justify-content:space-between; gap:10px; border-bottom:1px solid var(--line); padding:0 4px 13px; margin-bottom:8px; }
+    .directory-head h2 { font:600 19px Fraunces,serif; } .directory-head span { color:var(--muted); font-size:12px; }
+    .directory-close { border:0; cursor:pointer; background:transparent; color:var(--ink); font-size:23px; }
+    .directory-list { display:grid; }
+    .directory-item { border:0; border-bottom:1px solid #eee7da; background:transparent; text-align:left; color:var(--ink); padding:11px 6px; cursor:pointer; font-size:13px; }
+    .directory-item:hover { color:var(--pine); background:#f4f0e7; }
+    .popup-title { margin:0 0 4px; font-size:16px; }
+    .popup-copy { color:var(--muted); font-size:12px; margin:0 0 8px; }
+    .popup-meta { font-size:12px; margin:0 0 12px; }
+    .directions { display:inline-block; color:#fff; background:var(--pine); text-decoration:none; padding:8px 10px; border-radius:7px; font-size:12px; font-weight:700; }
+    .route-panel { display:grid; grid-template-columns:1fr auto; gap:9px; align-items:center; position:absolute; top:calc(100% + 10px); left:50%; transform:translateX(-50%); width:min(380px, calc(100vw - 32px)); padding:10px 12px; background:rgba(255,252,245,.96); border-radius:12px; box-shadow:0 8px 30px rgba(22,50,42,.13); }
+    .route-panel[hidden] { display:none; }
+    .route-status { font-size:12px; color:var(--muted); }
+    .route-button, .clear-button { border:0; cursor:pointer; border-radius:9px; padding:10px 11px; font-size:12px; font-weight:700; }
+    .route-button { background:var(--pine); color:#fff; } .route-button:disabled { opacity:.45; cursor:not-allowed; } .clear-button { color:var(--pine); background:#edf4ef; }
+    .route-summary { position:absolute; top:calc(100% + 59px); left:50%; transform:translateX(-50%); width:min(380px, calc(100vw - 32px)); margin:0; padding:9px 12px; color:var(--ink); background:rgba(255,252,245,.96); border-radius:10px; box-shadow:0 8px 30px rgba(22,50,42,.10); font-size:12px; line-height:1.4; }
+    .navigation-actions { position:absolute; top:calc(100% + 105px); left:50%; transform:translateX(-50%); width:min(380px, calc(100vw - 32px)); display:flex; gap:8px; justify-content:center; }
+    .navigation-actions[hidden] { display:none; } .navigation-actions button { border:0; cursor:pointer; border-radius:9px; padding:9px 10px; font-size:12px; font-weight:700; } .navigation-primary { background:var(--pine); color:#fff; } .navigation-secondary { background:#edf4ef; color:var(--pine); }
+    .clear-button { position:absolute; top:calc(100% + 59px); right:0; }
+    .admin-toggle { display:none; }
+    dialog { width:min(560px, calc(100vw - 28px)); max-height:calc(100vh - 28px); border:0; border-radius:16px; padding:0; color:var(--ink); background:var(--paper); box-shadow:0 18px 60px rgba(0,0,0,.28); }
+    dialog::backdrop { background:rgba(22,50,42,.45); }
+    .admin-head { display:flex; justify-content:space-between; align-items:flex-start; padding:21px 22px 15px; border-bottom:1px solid var(--line); }
+    .admin-head h2 { font:600 21px Fraunces,serif; } .admin-head p { margin:4px 0 0; color:var(--muted); font-size:12px; }
+    .icon-close { border:0; background:transparent; color:var(--ink); cursor:pointer; font-size:24px; line-height:1; }
+    .admin-form { padding:18px 22px 22px; display:grid; gap:14px; }
+    .admin-form label { margin:0; } .admin-form input,.admin-form select,.admin-form textarea { width:100%; margin-top:6px; border:1px solid var(--line); border-radius:9px; padding:10px; background:#fffdf8; color:var(--ink); }
+    .admin-form textarea { min-height:80px; resize:vertical; }
+    .admin-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .admin-actions { display:flex; gap:9px; flex-wrap:wrap; align-items:center; } .admin-actions button { border:0; cursor:pointer; border-radius:9px; padding:10px 12px; font-weight:700; }
+    .save-button { background:var(--pine); color:#fff; } .secondary-button { background:#edf4ef; color:var(--pine); } .danger-button { margin-left:auto; background:#f8e6e0; color:#9c3f2d; }
+    .photo-preview { display:flex; gap:8px; flex-wrap:wrap; } .photo-preview img { width:62px; height:62px; object-fit:cover; border-radius:8px; }
+    .admin-note { margin:0; color:var(--muted); font-size:11px; line-height:1.35; }
+    @media (max-width: 560px) { .app > aside { top:12px; width:calc(100vw - 24px); grid-template-columns:auto minmax(0,1fr); gap:8px; } .brand-mark { width:32px;height:32px;font-size:16px; } h1 { font-size:16px; } .map-label { top:auto;bottom:26px;left:13px; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside aria-label="Recherche de coffeeshops">
+      <div class="brand"><div class="brand-mark" aria-hidden="true">☕</div><div><h1>Amsterdam Coffee Map</h1><p class="eyebrow">Des adresses à garder sous la main.</p></div></div>
+      <div class="search"><label for="search">Rechercher une adresse</label><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Nom ou adresse"></div>
+      <div id="route-panel" class="route-panel" hidden><span id="route-status" class="route-status">Cliquez sur un marqueur pour l’épingler.</span><button id="route-button" class="route-button" type="button" disabled>Itinéraire</button></div>
+      <p id="route-summary" class="route-summary" hidden></p><div id="navigation-actions" class="navigation-actions" hidden><button id="open-google" class="navigation-primary" type="button">Valider dans Maps</button><button id="open-default-map" class="navigation-secondary" type="button">App par défaut</button></div>
+      <button id="clear-button" class="clear-button" type="button" hidden>Effacer</button>
+      <button id="admin-toggle" class="admin-toggle" type="button">Gérer les adresses</button>
+    </aside>
+    <main><div id="map" aria-label="Carte d'Amsterdam"></div><button id="directory-toggle" class="directory-toggle" type="button" aria-expanded="false">Adresses</button><aside id="directory" class="directory" aria-label="Liste des coffeeshops"><div class="directory-head"><div><h2>Adresses</h2><span id="directory-count"></span></div><button id="directory-close" class="directory-close" type="button" aria-label="Fermer">×</button></div><div id="directory-list" class="directory-list"></div></aside><button id="location-button" class="location-button" type="button" aria-label="Me localiser">⌖</button><div class="map-label">Amsterdam · Pays-Bas</div></main>
+  </div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+  <dialog id="admin-dialog" aria-labelledby="admin-title">
+    <div class="admin-head"><div><h2 id="admin-title">Gérer les adresses</h2><p>Vos changements restent enregistrés sur cet appareil.</p></div><button class="icon-close" id="admin-close" type="button" aria-label="Fermer">×</button></div>
+    <form id="admin-form" class="admin-form">
+      <label for="admin-place">Adresse à modifier</label><select id="admin-place"></select>
+      <div class="admin-grid"><label for="admin-name">Nom<input id="admin-name" required></label><label for="admin-district">Quartier<input id="admin-district"></label></div>
+      <label for="admin-address">Adresse<input id="admin-address" required></label>
+      <div class="admin-grid"><label for="admin-hours">Horaires<input id="admin-hours" placeholder="Ex. 10:00 – 01:00"></label><label for="admin-photos">Photos<input id="admin-photos" type="file" accept="image/*" multiple></label></div>
+      <div id="photo-preview" class="photo-preview"></div>
+      <label for="admin-review">Votre avis<textarea id="admin-review" placeholder="Notes privées, ambiance, produit à essayer…"></textarea></label>
+      <p class="admin-note">Ajoutez de petits fichiers photo : ils sont enregistrés localement dans ce navigateur.</p>
+      <div class="admin-actions"><button class="save-button" type="submit">Enregistrer</button><button class="secondary-button" id="new-place" type="button">Nouvelle adresse</button><button class="danger-button" id="hide-place" type="button">Masquer</button></div>
+    </form>
+  </dialog>
+  <script>
+window.importedCoffeeShops = [
+  {
+    "id": "t-gierenest",
+    "name": "'t Gierenest",
+    "address": "Amstelveenseweg 61, 1075 VV Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "t-keteltje",
+    "name": "'t Keteltje",
+    "address": "Marnixstraat 74, 1015 VX Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "e-hlp",
+    "name": "1e Hulp",
+    "address": "Marnixstraat 194, 1016 TL Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "e-cheech-and-chong-s",
+    "name": "2e Cheech and Chong's",
+    "address": "De Clercqstraat 30, Amsterdam 1052 NE",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "cae-de-kil",
+    "name": "420 Cafe (de Kuil)",
+    "address": "Oudebrugsteeg 27, 1012 JN Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "th-heaven",
+    "name": "7th Heaven",
+    "address": "Brouwersgracht 137, 1015 GE Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "96",
+    "name": "96",
+    "address": "Jan Pieter Heijestraat 96, 1053 GT Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "abraxas",
+    "name": "Abraxas",
+    "address": "Jonge Roelensteeg 12 - 14, 1012 PL Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "aktama",
+    "name": "Aktama 2",
+    "address": "Hudsonstraat 156, Amsterdam 1057 ST",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "amnesia",
+    "name": "Amnesia",
+    "address": "Herengracht 133, 1015 BG Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "amsterdam-genetics",
+    "name": "Amsterdam Genetics",
+    "address": "Haarlemmerstraat 44, Amsterdam 1013 ES",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "atlas",
+    "name": "Atlas",
+    "address": "Parlevinker 8, 1034 PZ, Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "babylon",
+    "name": "Babylon",
+    "address": "Beursstraat 27, 1012 JV Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "bagheera",
+    "name": "Bagheera",
+    "address": "Kloveniersburgwal 60, Amsterdam 1012 CX",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "balboa-amily",
+    "name": "Balboa Family",
+    "address": "Halvemaansteeg 1, 1017 CR Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "balo",
+    "name": "Balou",
+    "address": "Halvemaansteeg 5, 1017 CR Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "barneys",
+    "name": "Barney's Coffeeshop",
+    "address": "Haarlemmerstraat 102, 1013 EW Amsterdam",
+    "district": "Haarlemmerbuurt",
+    "hours": "08:00 – 01:00"
+  },
+  {
+    "id": "barraka",
+    "name": "Barraka",
+    "address": "Gravensstraat 9, 1012 NL Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "basjoe",
+    "name": "Basjoe",
+    "address": "Kloveniersburgwal 62, 1012 CX Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "best-riends-oost",
+    "name": "Best Friends Oost",
+    "address": "Niasstraat 1, Amsterdam 1095 TS",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "bij",
+    "name": "Bij",
+    "address": "Bonairestraat 78, 1058 XL Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "blackstar",
+    "name": "Blackstar",
+    "address": "Rozengracht 1a, 1016 LP Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "ble-lagoon",
+    "name": "Blue Lagoon",
+    "address": "Overtoom 342, 1054 JE Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "ble-sea",
+    "name": "Blue Sea",
+    "address": "Van Woustraat 87, 1074 AE Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "blebird",
+    "name": "Bluebird",
+    "address": "Sint Antoniesbreestraat 71, 1011 HB Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "boerejongens",
+    "name": "Boerejongens Centrum",
+    "address": "Utrechtsestraat 21, 1017 VH Amsterdam",
+    "district": "Centrum",
+    "hours": "10:00 – 00:00"
+  },
+  {
+    "id": "boerejongens-sloterdijk",
+    "name": "Boerejongens Sloterdijk",
+    "address": "Humberweg 2, Amsterdam 1043 AL",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "boerejongens-west",
+    "name": "Boerejongens West",
+    "address": "Baarsjesweg 239, Amsterdam 1058 AA",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "bronx",
+    "name": "Bronx",
+    "address": "Marnixstraat 92, 1015 VZ Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "blldog-energy",
+    "name": "Bulldog Energy",
+    "address": "Oudezijds Voorburgwal 220, Amsterdam 1012 GJ",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "blldog-no",
+    "name": "Bulldog No. 90",
+    "address": "Oudezijds Voorburgwal 90, Amsterdam 1012 GG",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "blldog-palace",
+    "name": "Bulldog Palace",
+    "address": "Leidseplein 17, Amsterdam 1017 PS",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "blldog-port",
+    "name": "Bulldog Port 26",
+    "address": "Coenhavenweg 26, Amsterdam 1013 BL",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "blldog-rockshop",
+    "name": "Bulldog Rockshop",
+    "address": "Singel 12, Amsterdam 1013 GA",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "bllwackie",
+    "name": "Bullwackie",
+    "address": "Woestduinstraat 76, 1058 TJ Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "bshdocter",
+    "name": "Bushdocter",
+    "address": "Thorbeckeplein 28, 1017 CS Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "carmona",
+    "name": "Carmona",
+    "address": "2e Jan van der Heijdenstraat 43, 1074 TL Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "catch",
+    "name": "Catch 33",
+    "address": "Nassaukade 33, 1052 CK Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "central",
+    "name": "Central",
+    "address": "Prins Hendrikkade 89, 1012 EA Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "chapitea",
+    "name": "Chapiteau",
+    "address": "Van Boetzelaerstraat 31, 1051 CT Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "city-hall",
+    "name": "City Hall",
+    "address": "Oudezijds Voorburgwal 189, Amsterdam 1012 EW",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "clb-media",
+    "name": "Club Media",
+    "address": "Gerard Doustraat 83-85, 1072 VN Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "katsu",
+    "name": "Coffeeshop Katsu",
+    "address": "1e van der Helststraat 70, Amsterdam 1072 NZ",
+    "district": "De Pijp",
+    "hours": "10:00 – 01:00"
+  },
+  {
+    "id": "coeeshop-oost",
+    "name": "Coffeeshop Oost",
+    "address": "3e Oosterparkstraat 73, Amsterdam 1091 JV",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "paradox",
+    "name": "Coffeeshop Paradox",
+    "address": "1e Bloemdwarsstraat 2, 1016 KS Amsterdam",
+    "district": "Jordaan",
+    "hours": "10:00 – 01:00"
+  },
+  {
+    "id": "yo-yo",
+    "name": "Coffeeshop Yo-Yo",
+    "address": "2e Jan van der Heijdenstraat 79, 1072 TZ Amsterdam",
+    "district": "De Pijp",
+    "hours": "10:00 – 01:00"
+  },
+  {
+    "id": "crashlight",
+    "name": "CrashLight",
+    "address": "Pretoriusstraat 67, 1092 GB Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "crsh",
+    "name": "Crush",
+    "address": "Marnixstraat 383, 1016 XR Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "d-l",
+    "name": "D&L",
+    "address": "Govert Flinckstraat 323, 1074 CB Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "de-kade",
+    "name": "De Kade",
+    "address": "Stadionkade 107, 1076 BN Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "de-overkant-horts",
+    "name": "de Overkant Hortus",
+    "address": "Nieuwe Herengracht 71, 1011 RR Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "de-prijs",
+    "name": "De Prijs",
+    "address": "Surinamestraat 7, Amsterdam 1058 GJ",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "de-spermarkt",
+    "name": "de Supermarkt",
+    "address": "Frederik Hendrikstraat 69, 1052 HL Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "dna",
+    "name": "DNA",
+    "address": "Achillesstraat 104, 1076 RH Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "dolphins",
+    "name": "Dolphins",
+    "address": "Kerkstraat 39, 1017 GB Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "eastwood",
+    "name": "Eastwood",
+    "address": "Pieter Vlamingstraat 286, 1093 AK Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "easy-times",
+    "name": "Easy Times",
+    "address": "Prinsengracht 476, 1017 KG Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "easy-times-2",
+    "name": "Easy Times 2",
+    "address": "Reguliersdwarsstraat 29, Amsterdam 1017 BJ",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "el-marssa",
+    "name": "El Marssa",
+    "address": "Witte de Withstraat 106, 1057 ZG Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "amily-irst",
+    "name": "Family First",
+    "address": "Amstel 36, Amsterdam 1017 AB",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "lower-power",
+    "name": "Flower Power",
+    "address": "Rozengracht 139, 1016 LV Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "ree-i",
+    "name": "Free I",
+    "address": "Reguliersdwarsstraat 70, 1017 BN Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "reedom",
+    "name": "Freedom",
+    "address": "Van Hogendorpstraat 201, 1051 CA Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "nny-people",
+    "name": "Funny People 2",
+    "address": "Tt. Vasumweg 4C, Amsterdam 1033 SC",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "get-down-to-it",
+    "name": "Get Down To It",
+    "address": "Korte Leidsedwarsstraat 77-79, 1017 PW Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "goa",
+    "name": "Goa",
+    "address": "Kloveniersburgwal 42, 1012 CW Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "green-place",
+    "name": "Green Place",
+    "address": "Kloveniersburgwal 4, 1012 CT Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "green-place-2",
+    "name": "Green Place 2",
+    "address": "Haarlemmerstraat 6, Amsterdam 1013 ER",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "greenhose-centrm",
+    "name": "Greenhouse Centrum",
+    "address": "Oudezijds Voorburgwal 191, 1012 EW Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "greenhose-cookies",
+    "name": "Greenhouse Cookies",
+    "address": "Haarlemmerstraat 64, Amsterdam 1013 ET",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "greenhose-namaste",
+    "name": "Greenhouse Namaste",
+    "address": "Waterlooplein 345, Amsterdam 1011 PG",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "greenhose-strain-hnters",
+    "name": "Greenhouse Strain Hunters",
+    "address": "Singel 387, 1012 WN Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "grey-area",
+    "name": "Grey Area",
+    "address": "Oude Leliestraat 2, 1015 AW Amsterdam",
+    "district": "Jordaan",
+    "hours": "12:00 – 00:00"
+  },
+  {
+    "id": "happy-days",
+    "name": "Happy Days",
+    "address": "Amsteldijk 139, Amsterdam 1079 LE",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "happy-eelings",
+    "name": "Happy Feelings",
+    "address": "Kerkstraat 51, 1017 GC Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "happy-people",
+    "name": "Happy People",
+    "address": "Dapperstraat 2, 1093 BT Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "hashtag",
+    "name": "Hashtag",
+    "address": "Reguliersgracht 27, Amsterdam 1017 LK",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "het-ballonnetje",
+    "name": "Het Ballonnetje",
+    "address": "Roetersstraat 12, 1018 WD Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "het-gelderse",
+    "name": "Het Gelderse",
+    "address": "Geldersekade 54, 1012 BK Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "hnter-s-downtown",
+    "name": "Hunter's Downtown",
+    "address": "Utrechtsestraat 14, Amsterdam 1017 VN",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "hnter-s-north-papaverweg",
+    "name": "Hunter's North - Papaverweg",
+    "address": "Papaverweg 2, Amsterdam 1032 KH",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "hnter-s-north-waterlandplein",
+    "name": "Hunter's North - Waterlandplein",
+    "address": "Waterlandplein 7, Amsterdam 1024 LL",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "hnter-s-west",
+    "name": "Hunter's West",
+    "address": "Orteliusstraat 193, Amsterdam 1056 NP",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "ibiza",
+    "name": "Ibiza",
+    "address": "Hemonystraat 16, 1074 BP Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "johnny",
+    "name": "Johnny",
+    "address": "Elandsgracht 3, 1016 TM Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "jolly-joker",
+    "name": "Jolly Joker",
+    "address": "Nieuwmarkt 4a, 1012 BC Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "jollygood",
+    "name": "Jollygood",
+    "address": "2e Laurierdwarsstraat 44, Amsterdam 1016 RB",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "jice-bar-de-watersnip",
+    "name": "Juice Bar de Watersnip",
+    "address": "Lodewijk van Deysselstraat 37, Amsterdam 1064 HL",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "kadinsky",
+    "name": "Kadinsky",
+    "address": "Rosmarijnsteeg 9, Amsterdam 1012 RP",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "kadinsky-2",
+    "name": "Kadinsky 2",
+    "address": "Zoutsteeg 14, Amsterdam 1012 LX",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "kadinsky-3",
+    "name": "Kadinsky 3",
+    "address": "Langebrugsteeg 7a, Amsterdam 1012 GB",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "kashmir-coeeshop",
+    "name": "Kashmir Coffeeshop",
+    "address": "Jan Pieter Heijestraat 82, Amsterdam 1053 GS",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "la-tertlia",
+    "name": "La Tertulia",
+    "address": "Prinsengracht 312, 1016 HX Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "lot",
+    "name": "Loft",
+    "address": "Jan van Galenstraat 285, 1056 CA Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "massawa",
+    "name": "Massawa",
+    "address": "Chassestraat 4, 1057 JD, Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "mediterrane-drewissharing",
+    "name": "Mediterrane (Drewissharing)",
+    "address": "Spuistraat 80, Amsterdam 1012 TX",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "millennim",
+    "name": "Millennium",
+    "address": "Jan Hanzenstraat 109, 1053 SN, Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "nachtegaal",
+    "name": "Nachtegaal",
+    "address": "Krugerplein 22, 1091 KZ Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "new-amsterdam",
+    "name": "New Amsterdam",
+    "address": "Hoofdweg 226, 1057 DG, Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "new-times",
+    "name": "New Times",
+    "address": "Spuistraat 260, 1012 VW Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "new-times-2",
+    "name": "New Times 2",
+    "address": "Amstelstraat 35, Amsterdam 1017 DA",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "nice-place",
+    "name": "Nice Place",
+    "address": "Van Ostadestraat 290, 1073 TW Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "noord",
+    "name": "Noord",
+    "address": "Ooievaarsweg 10, 1021 GZ, Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "old-chrch",
+    "name": "Old Church 2",
+    "address": "Amstel 8, 1017 AA Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "paciic",
+    "name": "Pacific",
+    "address": "Balthasar Floriszstraat 10, Amsterdam 1071 VC",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "papillon",
+    "name": "Papillon",
+    "address": "Van Der Helstplein 8, 1072 PH Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "popeye",
+    "name": "Popeye",
+    "address": "Haarlemmerstraat 63, 1013 EK Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "prix-d-ami",
+    "name": "Prix d'Ami",
+    "address": "Haringpakkerssteeg 3, Amsterdam 1012 LR",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "program",
+    "name": "ProGram",
+    "address": "Daniel Stalpertstraat 78, Amsterdam 1072 XK",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "reeer",
+    "name": "Reefer",
+    "address": "Sint Antoniesbreestraat 77, 1011 HB Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "relax",
+    "name": "Relax",
+    "address": "Binnen Oranjestraat 9, 1013 HZ Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "relax-zid",
+    "name": "Relax Zuid",
+    "address": "Vechtstraat 9, Amsterdam 1078 RE",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "repbliek",
+    "name": "Republiek",
+    "address": "2e Nassaustraat 1A, 1052 BJ, Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "resin",
+    "name": "Resin",
+    "address": "Hekelveld 7, 1012 SN Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "ricks-coeeshop",
+    "name": "Ricks Coffeeshop",
+    "address": "Oudezijds Voorburgwal 250, Amsterdam 1012 GK",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "risky-bsiness",
+    "name": "Risky Business",
+    "address": "Bos en Lommerweg 163, 1055 DS Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "rock-it",
+    "name": "Rock-It",
+    "address": "Nieuwmarkt 12, 1012 CR Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "rockland",
+    "name": "Rockland",
+    "address": "Raadhuisstraat 8, Amsterdam 1016 DE",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "rookies",
+    "name": "Rookies",
+    "address": "Korte Leidsedwarsstraat 145-147, 1017 PZ Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "roots",
+    "name": "Roots",
+    "address": "Hoekenrode 14B, 1102 BR Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "roxy",
+    "name": "Roxy",
+    "address": "Gerard Doustraat 188, 1073 XA Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "rthless",
+    "name": "Ruthless",
+    "address": "Hoofdweg 174, 1057 DC Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "saint",
+    "name": "Saint",
+    "address": "Regulierssteeg 2, Amsterdam 1017 CP",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "sativa",
+    "name": "Sativa",
+    "address": "Spuistraat 118, 1012 VA, Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "sensemillia",
+    "name": "Sensemillia",
+    "address": "Gillis van Ledenberchstraat 135-HS, Amsterdam 1052 LE",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "sensemillia-2",
+    "name": "Sensemillia 2",
+    "address": "Meer en Vaart 177/b, 1068 LA Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "siberie",
+    "name": "Siberie",
+    "address": "Brouwersgracht 11, 1015 GA Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "smokerdam",
+    "name": "Smokerdam",
+    "address": "Vechtstraat 63, 1079 JA Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "smokey",
+    "name": "Smokey",
+    "address": "Rembrandtplein 24, 1017 CV Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "solo",
+    "name": "Solo",
+    "address": "Korte Koningsstraat 2, 1011 GA Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "speakeasy",
+    "name": "Speakeasy 2",
+    "address": "1e Oosterparkstraat 47, 1091 GV Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "spirit",
+    "name": "Spirit",
+    "address": "Westerstraat 121, Amsterdam 1015 LZ",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "stones",
+    "name": "Stones",
+    "address": "Ruysdaelkade 145, Amsterdam 1072 AR",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "sperly",
+    "name": "SuperFly",
+    "address": "Van Woustraat 193, Amsterdam 1074 AN",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "spersknk",
+    "name": "Superskunk",
+    "address": "Prinsengracht 480, 1017 KG Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "terminator",
+    "name": "Terminator",
+    "address": "Admiraal de Ruijterweg 104, Amsterdam 1056 GP",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "terps-army",
+    "name": "Terps Army",
+    "address": "Nieuwe Nieuwstraat 32, 1012 NH Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "terps-army-2",
+    "name": "Terps Army 2",
+    "address": "Zieseniskade 22, Amsterdam 1017 RT",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "tha-dogg-hose",
+    "name": "Tha Dogg House",
+    "address": "Marnixstraat 333, Amsterdam 1016 TC",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "tha-dogg-hose-2",
+    "name": "Tha Dogg House 2",
+    "address": "Oudebrugsteeg 26, 1012 JP Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "the-border",
+    "name": "The Border",
+    "address": "Amstelveenseweg 1160, Amsterdam 1081 JW",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "the-corner",
+    "name": "The Corner",
+    "address": "Spaarndammerdijk 9, Amsterdam 1013 ZM",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "dampkring",
+    "name": "The Dampkring",
+    "address": "Handboogstraat 29, 1012 XM Amsterdam",
+    "district": "Centrum",
+    "hours": "10:00 – 01:00"
+  },
+  {
+    "id": "the-hit",
+    "name": "The Hit",
+    "address": "Rusland 16, Amsterdam 1012 CL",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "the-otherside",
+    "name": "The Otherside",
+    "address": "Reguliersdwarsstraat 6, 1017 BM Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "the-plg-store",
+    "name": "The Plug Store",
+    "address": "Singel 14, Amsterdam 1013 GA",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "the-plg-topia",
+    "name": "The Plug Utopia",
+    "address": "Nieuwezijds Voorburgwal 132, Amsterdam 1012 SH",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "the-plg-west",
+    "name": "The Plug West",
+    "address": "Frederik Hendrikstraat 123, Amsterdam 1052 HP",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "the-plg-westerdok",
+    "name": "The Plug Westerdok",
+    "address": "Barentszstraat 130, Amsterdam 1013 NS",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "stud",
+    "name": "The Stud",
+    "address": "Molukkenstraat 581, Amsterdam 1095 BJ",
+    "district": "Oost",
+    "hours": "10:00 – 01:00"
+  },
+  {
+    "id": "trepnt",
+    "name": "Trefpunt",
+    "address": "Zeeburgerdijk 33, Amsterdam 1093 SL",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "tweede-kamer",
+    "name": "Tweede Kamer",
+    "address": "Heisteeg 6, 1012 WC Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "tyson",
+    "name": "Tyson 2.0",
+    "address": "Spuistraat 222, 1012 VA Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "tyson-niewmarkt",
+    "name": "Tyson 2.0 Nieuwmarkt",
+    "address": "Nieuwmarkt 14, Amsterdam 1012 CR",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "vondel",
+    "name": "Vondel",
+    "address": "Overtoom 451-hs, 1054 kh Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "voyagers",
+    "name": "Voyagers",
+    "address": "Geldersekade 2, Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "warda",
+    "name": "Warda 1",
+    "address": "Van Woustraat 147, 1074 AJ Amsterdam",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "west-ban-tam",
+    "name": "West (Ban Tam)",
+    "address": "Balboastraat 19, Amsterdam 1057 VT",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  },
+  {
+    "id": "yin-yang",
+    "name": "Yin Yang",
+    "address": "Knollendamstraat 5, Amsterdam 1013 TL",
+    "district": "Amsterdam",
+    "hours": "Horaires non renseignés"
+  }
+];
+  </script>
+  <script>
+    // Remplacez ce tableau par une API lorsque vous aurez une source de données maintenue.
+    const starterShops = []; // fusionné dans coffeeshops-data.js (voir build-coffeeshops-data.mjs)
+    const keyFor = shop => { const first=String(shop.address||'').split(',')[0]; const m=first.match(/^(.+?)\s+(\d+)/); const street=(m?m[1]:first).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\btweede\b/g,'2e').replace(/\beerste\b/g,'1e').replace(/[^a-z0-9]/g,''); return m?`${street}|${m[2]}`:street; };
+    const ADMIN_STORAGE_KEY = 'amsterdamCoffeeMapAdminV1';
+    const readAdmin = () => { try { return JSON.parse(localStorage.getItem(ADMIN_STORAGE_KEY)) || {changes:{}, additions:[]}; } catch { return {changes:{}, additions:[]}; } };
+    let adminData = readAdmin();
+    const buildShops = () => [...new Map([...starterShops, ...(window.importedCoffeeShops || []), ...adminData.additions].map(shop => [keyFor(shop), shop])).values()]
+      .map(shop => ({...shop, ...(adminData.changes[shop.id] || {})})).filter(shop => !shop.hidden);
+    let shops = buildShops();
+    let map, routeLine, userMarker, userLocation, activeRoutePoints=[], geocodeQueue=[], geocodingActive=false;
+    const selected = new Set(); const markers = new Map();
+    const routeUrl = shop => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(shop.address + ', Amsterdam')}`;
+    const esc = text => String(text || '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+    function popup(shop) { const photos=(shop.photos || []).slice(0,1).map(src=>`<img src="${src}" alt="" style="width:100%;height:100px;object-fit:cover;border-radius:8px;margin:0 0 9px">`).join(''); const review=shop.review ? `<p class="popup-meta"><strong>Note :</strong> ${esc(shop.review)}</p>` : ''; return `${photos}<h3 class="popup-title">${esc(shop.name)}</h3><p class="popup-copy">${esc(shop.address)} · ${esc(shop.district)}</p><p class="popup-meta">Aujourd’hui : ${esc(shop.hours)}</p>${review}<button class="directions" type="button" onclick="window.togglePin('${shop.id}')">${selected.has(shop.id) ? 'Retirer le ping' : 'Ajouter au parcours'}</button>`; }
+    function markerIcon(active=false) { return L.divIcon({className:'', html:`<div style="width:18px;height:18px;border:3px solid #fff;border-radius:50% 50% 50% 0;background:${active ? '#155442' : '#d6644c'};transform:rotate(-45deg);box-shadow:0 2px 8px rgba(0,0,0,.25)"><span style="display:block;width:6px;height:6px;background:#fff;border-radius:50%;margin:3px"></span></div>`, iconSize:[18,18], iconAnchor:[9,18], popupAnchor:[0,-18]}); }
+    function addMarker(shop) {
+      if (markers.has(shop.id)) return;
+      const marker = L.marker([shop.lat,shop.lng], {icon:markerIcon(selected.has(shop.id)),title:shop.name}).addTo(map).bindPopup(popup(shop));
+      marker.on('click',()=>focus(shop.id));
+      markers.set(shop.id, marker);
+    }
+    const COORD_KEY = 'amsterdamCoffeeMapCoordinatesV2';
+    const stripAccents = t => String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\btweede\b/g,'2e').replace(/\beerste\b/g,'1e').replace(/[^a-z0-9]/g,'');
+    function parseAddress(address) {
+      const postcode = ((address.match(/\b(\d{4})\s?([A-Za-z]{2})\b/) || []).slice(1,3).join('') || '').toUpperCase();
+      const m = address.split(',')[0].trim().match(/^(.+?)\s+(\d+)\s*([A-Za-z]?)\b(?:\s*[-/]\s*\S+)?$/);
+      return m ? {street:m[1], number:m[2], letter:m[3].toLowerCase(), postcode} : null;
+    }
+    // PDOK Locatieserver : géocodeur officiel néerlandais (code postal + numéro), précis et sans limite à 1 requête/s.
+    async function geocodeAddress(address) {
+      const p = parseAddress(address); if (!p) return null;
+      const queries = [p.postcode && `${p.postcode} ${p.number}${p.letter}`, `${p.street} ${p.number}${p.letter} Amsterdam`].filter(Boolean);
+      for (const q of queries) {
+        const response = await fetch(`https://api.pdok.nl/bzk/locatieserver/search/v3_1/free?q=${encodeURIComponent(q)}&fq=type:adres&rows=3&fl=centroide_ll,straatnaam,huisnummer`);
+        const docs = (await response.json()).response?.docs || [];
+        const doc = docs.find(d => stripAccents(d.straatnaam) === stripAccents(p.street) && String(d.huisnummer) === p.number);
+        const point = doc && doc.centroide_ll.match(/POINT\(([-\d.]+) ([-\d.]+)\)/);
+        if (point) { const lat=Number(point[2]), lng=Number(point[1]); if (lat>52.28 && lat<52.43 && lng>4.72 && lng<5.07) return {lat,lng}; }
+      }
+      return null;
+    }
+    function geocodeRemaining() {
+      let cached = {}; try { cached = JSON.parse(localStorage.getItem(COORD_KEY) || '{}'); } catch {}
+      geocodeQueue = shops.filter(shop => !markers.has(shop.id));
+      geocodingActive = true;
+      const worker = async () => {
+        while (geocodeQueue.length) {
+          const shop = geocodeQueue.shift(); const saved = cached[shop.id];
+          try {
+            const point = saved || await geocodeAddress(shop.address);
+            if (point) { shop.lat=point.lat; shop.lng=point.lng; cached[shop.id]=point; addMarker(shop); }
+          } catch { /* adresse laissée de côté, réessayée au prochain chargement */ }
+        }
+      };
+      Promise.all([worker(), worker(), worker(), worker()]).finally(() => { geocodingActive=false; try { localStorage.setItem(COORD_KEY, JSON.stringify(cached)); } catch {} });
+    }
+    function prioritizeGeocode(id) { const index=geocodeQueue.findIndex(shop=>shop.id===id); if(index>0) geocodeQueue.unshift(geocodeQueue.splice(index,1)[0]); }
+    function initMap() {
+      map = L.map('map', {zoomControl:false}).setView([52.3676,4.8952],13); L.control.zoom({position:'bottomright'}).addTo(map); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(map);
+      shops.filter(shop => Number.isFinite(shop.lat) && Number.isFinite(shop.lng)).forEach(addMarker);
+      geocodeRemaining();
+      render();
+    }
+    function locateUser() {
+      if (!navigator.geolocation) { routeStatus.textContent='La localisation n’est pas disponible sur cet appareil.'; return; }
+      routeStatus.textContent='Recherche de votre position…';
+      navigator.geolocation.getCurrentPosition(position=>{ userLocation={lat:position.coords.latitude,lng:position.coords.longitude,name:'Votre position'}; if(userMarker) map.removeLayer(userMarker); userMarker=L.circleMarker([userLocation.lat,userLocation.lng],{radius:8,weight:3,color:'#fff',fillColor:'#1769aa',fillOpacity:1}).addTo(map).bindPopup('Votre position'); map.setView([userLocation.lat,userLocation.lng],15); routeStatus.textContent='Position activée : elle servira de départ au parcours.'; },()=>{routeStatus.textContent='Autorisez la localisation dans votre navigateur pour l’utiliser.';},{enableHighAccuracy:true,timeout:10000,maximumAge:60000});
+    }
+    const search=document.querySelector('#search'), routeButton=document.querySelector('#route-button'), routePanel=document.querySelector('#route-panel'), clearButton=document.querySelector('#clear-button'), routeStatus=document.querySelector('#route-status'), routeSummary=document.querySelector('#route-summary');
+    function focus(id) { const shop=shops.find(s=>s.id===id); const marker=markers.get(id); if (!map) return; if(!marker) { prioritizeGeocode(id); routeStatus.textContent='Localisation de cette adresse…'; return; } map.setView([shop.lat,shop.lng],16); marker.setPopupContent(popup(shop)).openPopup(); }
+    function toggle(id) { selected.has(id) ? selected.delete(id) : selected.add(id); if (routeLine) { map.removeControl(routeLine); routeLine=null; } activeRoutePoints=[]; routeSummary.hidden=true; document.querySelector('#navigation-actions').hidden=true; render(); }
+    window.togglePin = id => { toggle(id); focus(id); };
+    function pointsForRoute() { return shops.filter(s=>selected.has(s.id) && Number.isFinite(s.lat) && Number.isFinite(s.lng)); }
+    function squaredDistance(a,b) { return (a.lat-b.lat)**2 + (a.lng-b.lng)**2; }
+    function nearestOrder(points, origin) { const remaining=[...points]; const ordered=[]; let current=origin || remaining.shift(); while(remaining.length) { let best=0, distance=Infinity; remaining.forEach((candidate,index)=>{ const value=squaredDistance(current,candidate); if(value<distance){distance=value;best=index;} }); current=remaining.splice(best,1)[0]; ordered.push(current); } return ordered; }
+    function route() {
+      const points=pointsForRoute();
+      if (points.length < 2) return;
+      if (points.length > 25) { routeStatus.textContent='Un itinéraire peut contenir jusqu’à 25 adresses à la fois.'; return; }
+      const stops=nearestOrder(points,userLocation); const ordered=userLocation ? [userLocation,...stops] : [points[0],...stops]; activeRoutePoints=ordered;
+      routeStatus.textContent='Calcul de l’itinéraire optimisé…'; routeButton.disabled=true;
+      if (routeLine) map.removeControl(routeLine);
+      routeLine=L.Routing.control({waypoints:ordered.map(point=>L.latLng(point.lat,point.lng)),router:L.Routing.osrmv1({serviceUrl:'https://router.project-osrm.org/route/v1'}),lineOptions:{styles:[{color:'#155442',opacity:.85,weight:5}]},createMarker:()=>null,addWaypoints:false,draggableWaypoints:false,show:false,fitSelectedRoutes:true}).addTo(map);
+      routeLine.on('routesfound',event=>{ routeButton.disabled=false; const summary=event.routes[0].summary; routeStatus.textContent=`Parcours optimisé · ${points.length} adresses`; routeSummary.hidden=false; document.querySelector('#navigation-actions').hidden=false; routeSummary.textContent=`${(summary.totalDistance/1000).toFixed(1)} km · environ ${Math.round(summary.totalTime/60)} min à pied`; });
+      routeLine.on('routingerror',()=>{routeButton.disabled=false;routeStatus.textContent='Itinéraire indisponible pour le moment.';});
+    }
+    function render() {
+      markers.forEach((marker,id)=>marker.setIcon(markerIcon(selected.has(id))));
+      const count=selected.size; routeStatus.textContent=`${count} adresse${count>1?'s':''} pingée${count>1?'s':''}`;
+      routePanel.hidden=!count; routeButton.disabled=count<2; clearButton.hidden=!count;
+    }
+    search.addEventListener('input',()=>{ const term=search.value.trim().toLowerCase(); let first; markers.forEach((marker,id)=>{ const shop=shops.find(s=>s.id===id); const visible=!term || `${shop.name} ${shop.address}`.toLowerCase().includes(term); if(visible && !map.hasLayer(marker)) marker.addTo(map); if(!visible && map.hasLayer(marker)) map.removeLayer(marker); if(visible && !first) first=shop; }); if(term && first) focus(first.id); });
+    routeButton.addEventListener('click',route);
+    clearButton.addEventListener('click',()=>{ selected.clear(); if(routeLine){map.removeControl(routeLine);routeLine=null;} activeRoutePoints=[]; routeSummary.hidden=true; document.querySelector('#navigation-actions').hidden=true; render(); });
+    document.querySelector('#location-button').addEventListener('click',locateUser);
+    document.querySelector('#open-google').addEventListener('click',()=>{ if(activeRoutePoints.length<2) return; const origin=activeRoutePoints[0], destination=activeRoutePoints.at(-1), middle=activeRoutePoints.slice(1,-1); const url=`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(`${origin.lat},${origin.lng}`)}&destination=${encodeURIComponent(`${destination.lat},${destination.lng}`)}&travelmode=walking${middle.length?`&waypoints=${encodeURIComponent(middle.map(point=>`${point.lat},${point.lng}`).join('|'))}`:''}`; window.open(url,'_blank','noopener'); });
+    document.querySelector('#open-default-map').addEventListener('click',()=>{ if(!activeRoutePoints.length) return; const destination=activeRoutePoints.at(-1); const label=encodeURIComponent(destination.name || 'Destination'); const apple=/iPad|iPhone|iPod/.test(navigator.userAgent); window.location.href=apple ? `https://maps.apple.com/?daddr=${destination.lat},${destination.lng}&dirflg=w` : `geo:${destination.lat},${destination.lng}?q=${destination.lat},${destination.lng}(${label})`; });
+    const adminDialog=document.querySelector('#admin-dialog'), adminForm=document.querySelector('#admin-form'), adminPlace=document.querySelector('#admin-place'), adminName=document.querySelector('#admin-name'), adminDistrict=document.querySelector('#admin-district'), adminAddress=document.querySelector('#admin-address'), adminHours=document.querySelector('#admin-hours'), adminReview=document.querySelector('#admin-review'), adminPhotos=document.querySelector('#admin-photos'), photoPreview=document.querySelector('#photo-preview'), hidePlace=document.querySelector('#hide-place');
+    let editingNew=false, pendingPhotos=[];
+    const allShops = () => [...new Map([...starterShops, ...(window.importedCoffeeShops || []), ...adminData.additions].map(shop => [shop.id, {...shop, ...(adminData.changes[shop.id] || {})}])).values()];
+    const slug = text => text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
+    function showPhotos(photos=[]) { photoPreview.innerHTML=photos.map(src=>`<img src="${src}" alt="Aperçu de la photo">`).join(''); }
+    function fillAdmin(id) {
+      editingNew=id==='new'; const shop=allShops().find(s=>s.id===id) || {name:'',address:'',district:'Amsterdam',hours:'',review:'',photos:[]};
+      adminName.value=shop.name || ''; adminAddress.value=shop.address || ''; adminDistrict.value=shop.district || ''; adminHours.value=shop.hours === 'Horaires non renseignés' ? '' : (shop.hours || ''); adminReview.value=shop.review || ''; pendingPhotos=shop.photos || []; showPhotos(pendingPhotos); hidePlace.textContent=shop.hidden ? 'Réafficher' : 'Masquer'; hidePlace.hidden=editingNew;
+    }
+    function refreshAdminOptions(selectedId) { const records=allShops().sort((a,b)=>a.name.localeCompare(b.name)); adminPlace.innerHTML=`<option value="new">＋ Nouvelle adresse</option>${records.map(s=>`<option value="${s.id}">${esc(s.name)}${s.hidden?' — masqué':''}</option>`).join('')}`; adminPlace.value=selectedId || records[0]?.id || 'new'; fillAdmin(adminPlace.value); }
+    async function compressPhoto(file) { return new Promise((resolve,reject)=>{ const reader=new FileReader(); reader.onerror=reject; reader.onload=()=>{ const image=new Image(); image.onload=()=>{ const scale=Math.min(1,900/Math.max(image.width,image.height)); const canvas=document.createElement('canvas'); canvas.width=Math.round(image.width*scale); canvas.height=Math.round(image.height*scale); canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height); resolve(canvas.toDataURL('image/jpeg',.72)); }; image.onerror=reject; image.src=reader.result; }; reader.readAsDataURL(file); }); }
+    const adminToggle=document.querySelector('#admin-toggle'); if (new URLSearchParams(location.search).get('admin') === '1') adminToggle.style.display='block';
+    adminToggle.addEventListener('click',()=>{ refreshAdminOptions(); adminDialog.showModal(); });
+    document.querySelector('#admin-close').addEventListener('click',()=>adminDialog.close());
+    adminPlace.addEventListener('change',()=>fillAdmin(adminPlace.value));
+    document.querySelector('#new-place').addEventListener('click',()=>{ adminPlace.value='new'; fillAdmin('new'); });
+    adminPhotos.addEventListener('change',async()=>{ const files=[...adminPhotos.files].slice(0,3); const images=await Promise.all(files.map(compressPhoto)); pendingPhotos=[...pendingPhotos,...images].slice(0,4); showPhotos(pendingPhotos); });
+    hidePlace.addEventListener('click',()=>{ const id=adminPlace.value; if(id==='new') return; const shop=allShops().find(s=>s.id===id); adminData.changes[id]={...(adminData.changes[id]||{}), hidden:!shop.hidden}; localStorage.setItem(ADMIN_STORAGE_KEY,JSON.stringify(adminData)); location.reload(); });
+    adminForm.addEventListener('submit',event=>{ event.preventDefault(); const existing=allShops().find(s=>s.id===adminPlace.value); const payload={name:adminName.value.trim(),address:adminAddress.value.trim(),district:adminDistrict.value.trim()||'Amsterdam',hours:adminHours.value.trim()||'Horaires non renseignés',review:adminReview.value.trim(),photos:pendingPhotos,hidden:false}; if(!payload.name || !payload.address) return; if(editingNew){ let id=slug(payload.name); let number=2; while(allShops().some(s=>s.id===id)){id=`${slug(payload.name)}-${number++}`;} adminData.additions.push({id,...payload}); } else { adminData.changes[existing.id]={...(adminData.changes[existing.id]||{}),...payload}; } try { localStorage.setItem(ADMIN_STORAGE_KEY,JSON.stringify(adminData)); location.reload(); } catch { alert('Les photos prennent trop de place dans le stockage local. Retirez-en ou choisissez des images plus légères.'); } });
+    const directory=document.querySelector('#directory'), directoryToggle=document.querySelector('#directory-toggle'), directoryList=document.querySelector('#directory-list');
+    function renderDirectory() { const ordered=[...shops].sort((a,b)=>a.name.localeCompare(b.name,'fr')); document.querySelector('#directory-count').textContent=`${ordered.length} coffeeshops`; directoryList.innerHTML=ordered.map(shop=>`<button class="directory-item" type="button" data-shop-id="${shop.id}">${esc(shop.name)}</button>`).join(''); directoryList.querySelectorAll('button').forEach(button=>button.addEventListener('click',()=>{ directory.classList.remove('is-open'); directoryToggle.setAttribute('aria-expanded','false'); focus(button.dataset.shopId); })); }
+    directoryToggle.addEventListener('click',()=>{ const open=directory.classList.toggle('is-open'); directoryToggle.setAttribute('aria-expanded',String(open)); });
+    document.querySelector('#directory-close').addEventListener('click',()=>{ directory.classList.remove('is-open'); directoryToggle.setAttribute('aria-expanded','false'); });
+    renderDirectory();
+    initMap(); setTimeout(locateUser,500);
+  </script>
+</body>
+</html>
